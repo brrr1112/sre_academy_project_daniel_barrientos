@@ -1,0 +1,35 @@
+# Default values. Override with --set or -f (see README).
+image:
+  repository: ghcr.io/YOUR-USERNAME/sre-task-manager
+  tag: "1.0.0"
+
+# One replica on purpose: tasks are kept in memory (see app/app.py)
+replicaCount: 1
+
+service:
+  type: NodePort
+  port: 5000
+  nodePort: 30007
+
+# Becomes the ConfigMap that is injected as environment variables
+config:
+  LOG_LEVEL: "INFO"
+  MAX_TASKS: "200"
+  # Enables POST /api/chaos (fault injection) so alerts can be demonstrated on demand
+  ENABLE_CHAOS: "true"
+  OTEL_SERVICE_NAME: "sre-task-manager"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "jaeger.opentelemetry.svc.cluster.local:4317"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+# Synthetic traffic CronJob (keeps dashboards alive)
+trafficGenerator:
+  enabled: true
+  schedule: "*/1 * * * *"
+  image: curlimages/curl:8.23.0

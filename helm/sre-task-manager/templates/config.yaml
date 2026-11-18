@@ -1,0 +1,21 @@
+# Identity for the app pods. The app never calls the Kubernetes API, so no token is mounted.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "sre-task-manager.name" . }}
+  namespace: {{ .Release.Namespace }}
+automountServiceAccountToken: false
+---
+# Non-secret configuration, injected as environment variables
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "sre-task-manager.name" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ include "sre-task-manager.name" . }}
+data:
+  APP_VERSION: {{ .Chart.AppVersion | quote }}
+{{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | quote }}
+{{- end }}
