@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SRE Task Manager</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main>
+    <h1>SRE Task Manager</h1>
+    <p class="subtitle">A small app instrumented with metrics, logs and traces.</p>
+
+    <form id="task-form" autocomplete="off">
+      <label for="title" class="visually-hidden">New task</label>
+      <input id="title" name="title" type="text" maxlength="100" placeholder="What needs to be done?" required>
+      <button type="submit">Add</button>
+    </form>
+
+    <p id="message" role="alert"></p>
+
+    <ul id="task-list"></ul>
+
+    <p id="summary" class="subtitle"></p>
+  </main>
+  <footer>v{{ version }} &middot; <a href="/metrics">/metrics</a></footer>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
