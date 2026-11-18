@@ -1,0 +1,51 @@
+---
+# Infrastructure as Code: prepares a workstation and deploys the project.
+# Run from the repository root:
+#   ansible-playbook -i ansible/inventory.ini ansible/playbook.yaml
+- name: Prepare tools and deploy the SRE Task Manager
+  hosts: all
+  vars:
+    project_dir: "{{ playbook_dir }}/.."
+  tasks:
+    - name: Install tools on macOS
+      homebrew:
+        name:
+          - colima
+          - docker
+          - kubectl
+          - minikube
+          - helm
+        state: present
+      when: ansible_os_family == "Darwin"
+
+    - name: Install kubectl on Debian/Ubuntu
+      apt:
+        name: kubectl
+        state: present
+      become: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Check that the required tools are available
+      command: "which {{ item }}"
+      loop:
+        - docker
+        - kubectl
+        - minikube
+      changed_when: false
+
+    - name: Deploy the application and the monitoring stack
+      command: ./cluster.sh
+      args:
+        chdir: "{{ project_dir }}"
+      environment:
+        SLACK_WEBHOOK_URL: "{{ lookup('env', 'SLACK_WEBHOOK_URL') }}"
+        SMTP_PASSWORD: "{{ lookup('env', 'SMTP_PASSWORD') }}"
+
+    - name: Show the pods
+      command: kubectl get pods -A
+      register: pods
+      changed_when: false
+
+    - name: Print the pods
+      debug:
+        var: pods.stdout_lines
