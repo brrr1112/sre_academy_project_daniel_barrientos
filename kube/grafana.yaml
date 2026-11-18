@@ -1,0 +1,1016 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources-config
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus-service.monitoring.svc.cluster.local:9090
+        isDefault: true
+        editable: true
+      - name: Alertmanager
+        uid: alertmanager
+        type: alertmanager
+        access: proxy
+        url: http://alertmanager.monitoring.svc.cluster.local:9093
+        jsonData:
+          implementation: prometheus
+      - name: Jaeger
+        uid: jaeger
+        type: jaeger
+        access: proxy
+        url: http://jaeger-service.opentelemetry.svc.cluster.local:16686
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-config
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        options:
+          path: /etc/grafana/dashboards
+  golden-signals.json: |
+    {
+      "uid": "sre-task-manager",
+      "title": "SRE Task Manager - Golden Signals",
+      "tags": [
+        "sre",
+        "golden-signals"
+      ],
+      "timezone": "browser",
+      "editable": true,
+      "refresh": "10s",
+      "time": {
+        "from": "now-30m",
+        "to": "now"
+      },
+      "schemaVersion": 39,
+      "version": 1,
+      "panels": [
+        {
+          "id": 1,
+          "type": "row",
+          "title": "Overview",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Availability (targets up)",
+          "description": "1 = every target is up",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "min(up{job=\"sre-task-manager\"})",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 0,
+            "y": 1,
+            "w": 6,
+            "h": 4
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background"
+          }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Traffic (req/s)",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(http_requests_total{job=\"sre-task-manager\"}[5m]))",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 6,
+            "y": 1,
+            "w": 6,
+            "h": 4
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background"
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Error ratio (5xx)",
+          "description": "Alert fires above 5%",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(http_requests_total{job=\"sre-task-manager\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"sre-task-manager\"}[5m]))",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 12,
+            "y": 1,
+            "w": 6,
+            "h": 4
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.01
+                  },
+                  {
+                    "color": "red",
+                    "value": 0.05
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background"
+          }
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Latency p95",
+          "description": "Alert fires above 500 ms",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"sre-task-manager\"}[5m])) by (le))",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 18,
+            "y": 1,
+            "w": 6,
+            "h": 4
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.25
+                  },
+                  {
+                    "color": "red",
+                    "value": 0.5
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background"
+          }
+        },
+        {
+          "id": 6,
+          "type": "row",
+          "title": "Latency",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 5,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Latency percentiles",
+          "description": "How long requests take (all endpoints)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"sre-task-manager\"}[5m])) by (le))",
+              "legendFormat": "p50",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"sre-task-manager\"}[5m])) by (le))",
+              "legendFormat": "p95",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"sre-task-manager\"}[5m])) by (le))",
+              "legendFormat": "p99",
+              "refId": "C"
+            }
+          ],
+          "gridPos": {
+            "x": 0,
+            "y": 6,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Average latency by endpoint",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(http_request_duration_seconds_sum{job=\"sre-task-manager\"}[5m])) by (method, endpoint) / sum(rate(http_request_duration_seconds_count{job=\"sre-task-manager\"}[5m])) by (method, endpoint)",
+              "legendFormat": "{{method}} {{endpoint}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 12,
+            "y": 6,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 9,
+          "type": "row",
+          "title": "Traffic",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 14,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Requests per second by endpoint",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(http_requests_total{job=\"sre-task-manager\"}[5m])) by (method, endpoint)",
+              "legendFormat": "{{method}} {{endpoint}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 0,
+            "y": 15,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "Requests per second by status code",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(http_requests_total{job=\"sre-task-manager\"}[5m])) by (status)",
+              "legendFormat": "{{status}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 12,
+            "y": 15,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 12,
+          "type": "row",
+          "title": "Errors",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 23,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 13,
+          "type": "timeseries",
+          "title": "5xx error ratio",
+          "description": "Server-side failures / all requests",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(http_requests_total{job=\"sre-task-manager\",status=~\"5..\"}[5m])) / sum(rate(http_requests_total{job=\"sre-task-manager\"}[5m]))",
+              "legendFormat": "5xx ratio",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 0,
+            "y": 24,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 14,
+          "type": "timeseries",
+          "title": "Rejected requests (validation errors) per second",
+          "description": "Client mistakes (4xx). They do not count against availability.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(task_validation_errors_total{job=\"sre-task-manager\"}[5m])) by (reason)",
+              "legendFormat": "{{reason}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 12,
+            "y": 24,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 15,
+          "type": "row",
+          "title": "Saturation",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 32,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 16,
+          "type": "timeseries",
+          "title": "Container CPU usage (cores)",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"application\",container=\"sre-task-manager\"}[5m])) by (pod)",
+              "legendFormat": "{{pod}}",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "max(container_spec_cpu_quota{namespace=\"application\",container=\"sre-task-manager\"} / container_spec_cpu_period{namespace=\"application\",container=\"sre-task-manager\"})",
+              "legendFormat": "limit",
+              "refId": "B"
+            }
+          ],
+          "gridPos": {
+            "x": 0,
+            "y": 33,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 17,
+          "type": "timeseries",
+          "title": "Container memory (working set vs limit)",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(container_memory_working_set_bytes{namespace=\"application\",container=\"sre-task-manager\"}) by (pod)",
+              "legendFormat": "{{pod}} used",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "max(container_spec_memory_limit_bytes{namespace=\"application\",container=\"sre-task-manager\"})",
+              "legendFormat": "limit",
+              "refId": "B"
+            }
+          ],
+          "gridPos": {
+            "x": 12,
+            "y": 33,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 18,
+          "type": "timeseries",
+          "title": "Requests in progress",
+          "description": "Concurrent requests being served (saturation of the app itself)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "max_over_time(http_requests_in_progress{job=\"sre-task-manager\"}[1m])",
+              "legendFormat": "in flight",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 0,
+            "y": 41,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 19,
+          "type": "timeseries",
+          "title": "Pod restarts",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(changes(process_start_time_seconds{job=\"sre-task-manager\"}[1h]))",
+              "legendFormat": "restarts last hour",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 12,
+            "y": 41,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 20,
+          "type": "row",
+          "title": "Business metrics",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 49,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 21,
+          "type": "timeseries",
+          "title": "Tasks by status",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(tasks_current{job=\"sre-task-manager\"}) by (status)",
+              "legendFormat": "{{status}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 0,
+            "y": 50,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 22,
+          "type": "timeseries",
+          "title": "Task operations per second",
+          "description": "",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(task_operations_total{job=\"sre-task-manager\"}[5m])) by (operation)",
+              "legendFormat": "{{operation}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 12,
+            "y": 50,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 23,
+          "type": "row",
+          "title": "Alerts",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 58,
+            "w": 24,
+            "h": 1
+          }
+        },
+        {
+          "id": 24,
+          "type": "alertlist",
+          "title": "Firing alerts (from Prometheus)",
+          "gridPos": {
+            "x": 0,
+            "y": 59,
+            "w": 24,
+            "h": 8
+          },
+          "options": {
+            "alertInstanceLabelFilter": "",
+            "showInstances": true,
+            "stateFilter": {
+              "firing": true,
+              "pending": true,
+              "noData": false,
+              "normal": false,
+              "error": true
+            }
+          }
+        }
+      ]
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-deployment
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/metrics"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: grafana
+          image: grafana/grafana:13.3.1
+          env:
+            # Listen on the pod IP, not on all interfaces
+            - name: GF_SERVER_HTTP_ADDR
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            # Created by cluster.sh (random password, never stored in Git)
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: grafana-admin
+                  key: admin-password
+            - name: GF_PATHS_PROVISIONING
+              value: /etc/grafana/provisioning
+            # Log to stdout only (the root filesystem is read-only)
+            - name: GF_LOG_MODE
+              value: console
+            # Plugins go on the writable volume (the root filesystem is read-only)
+            - name: GF_PATHS_PLUGINS
+              value: /var/lib/grafana/plugins
+          ports:
+            - containerPort: 3000
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          volumeMounts:
+            - name: grafana-config-datasources
+              mountPath: /etc/grafana/provisioning/datasources
+              readOnly: true
+            - name: grafana-config-dashboards
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml
+              subPath: dashboards.yaml
+              readOnly: true
+            - name: grafana-config-dashboards
+              mountPath: /etc/grafana/dashboards
+              readOnly: true
+            - name: grafana-storage
+              mountPath: /var/lib/grafana
+      volumes:
+        - name: grafana-config-datasources
+          configMap:
+            name: grafana-datasources-config
+        - name: grafana-config-dashboards
+          configMap:
+            name: grafana-dashboards-config
+        - name: grafana-storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: monitoring
+  labels:
+    app: grafana
+spec:
+  selector:
+    app: grafana
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000
+  type: NodePort
