@@ -1,0 +1,18 @@
+# Namespaces are created first (cluster.sh) so the secrets can be placed in them.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: application
+  labels:
+    # Pod Security Admission: pods in this namespace must meet the "restricted" profile
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: opentelemetry
