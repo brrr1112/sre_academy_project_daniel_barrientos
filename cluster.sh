@@ -114,7 +114,7 @@ pause 2
 # Kubernetes Deployment
 # -------------------------------
 log "Creating namespaces..."
-safe_run kubectl apply -f ./k8s/namespaces.yaml
+safe_run kubectl apply -f ./kube/namespaces.yaml
 
 # Secrets are created from environment variables, never stored in Git.
 log "Creating secrets..."
@@ -139,14 +139,14 @@ fi
 
 log "Applying Kubernetes configurations..."
 # The manifest points to a registry image; swap it for the locally built one.
-sed "s|image: ghcr.io/YOUR-USERNAME/sre-task-manager:1.0.0|image: $APP_IMAGE|" ./k8s/application.yaml \
+sed "s|image: ghcr.io/YOUR-USERNAME/sre-task-manager:1.0.0|image: $APP_IMAGE|" ./kube/application.yaml \
   | safe_run kubectl apply -f -
 for file in \
-  ./k8s/jaeger.yaml \
-  ./k8s/prometheus.yaml \
-  ./k8s/prometheus-rbac-cluster.yaml \
-  ./k8s/alertmanager.yaml \
-  ./k8s/grafana.yaml
+  ./kube/jaeger.yaml \
+  ./kube/prometheus.yaml \
+  ./kube/prometheus-rbac-cluster.yaml \
+  ./kube/alertmanager.yaml \
+  ./kube/grafana.yaml
 do
   safe_run kubectl apply -f "$file"
 done

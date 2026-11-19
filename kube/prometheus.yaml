@@ -151,6 +151,9 @@ metadata:
     app: prometheus
 spec:
   replicas: 1
+  # stop the old pod before starting the new one
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: prometheus
@@ -223,7 +226,8 @@ spec:
           configMap:
             name: prometheus-rules
         - name: prometheus-storage-volume
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: prometheus-data
 
 ---
 apiVersion: v1
@@ -240,4 +244,5 @@ spec:
     - protocol: TCP
       port: 9090
       targetPort: 9090
+      nodePort: 30090
   type: NodePort
