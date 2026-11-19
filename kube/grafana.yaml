@@ -406,13 +406,100 @@ data:
           }
         },
         {
+          "id": 25,
+          "type": "timeseries",
+          "title": "Endpoint p95 Latency by Route (10ms-50ms delay)",
+          "description": "p95 latency per route demonstrating the random oscillating delay",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"sre-task-manager\"}[1m])) by (le, method, endpoint))",
+              "legendFormat": "{{method}} {{endpoint}}",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {
+            "x": 0,
+            "y": 14,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
+          "id": 26,
+          "type": "timeseries",
+          "title": "Endpoint Random Processing Delay",
+          "description": "Observed random processing delays per endpoint",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(rate(endpoint_delay_seconds_sum{job=\"sre-task-manager\"}[1m])) by (endpoint) / sum(rate(endpoint_delay_seconds_count{job=\"sre-task-manager\"}[1m])) by (endpoint)",
+              "legendFormat": "{{endpoint}} (avg)",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "histogram_quantile(0.95, sum(rate(endpoint_delay_seconds_bucket{job=\"sre-task-manager\"}[1m])) by (le, endpoint))",
+              "legendFormat": "{{endpoint}} (p95)",
+              "refId": "B"
+            }
+          ],
+          "gridPos": {
+            "x": 12,
+            "y": 14,
+            "w": 12,
+            "h": 8
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          }
+        },
+        {
           "id": 9,
           "type": "row",
           "title": "Traffic",
           "collapsed": false,
           "gridPos": {
             "x": 0,
-            "y": 14,
+            "y": 22,
             "w": 24,
             "h": 1
           }
@@ -439,7 +526,7 @@ data:
           ],
           "gridPos": {
             "x": 0,
-            "y": 15,
+            "y": 23,
             "w": 12,
             "h": 8
           },
@@ -478,7 +565,7 @@ data:
           ],
           "gridPos": {
             "x": 12,
-            "y": 15,
+            "y": 23,
             "w": 12,
             "h": 8
           },
@@ -502,7 +589,7 @@ data:
           "collapsed": false,
           "gridPos": {
             "x": 0,
-            "y": 23,
+            "y": 31,
             "w": 24,
             "h": 1
           }
@@ -529,7 +616,7 @@ data:
           ],
           "gridPos": {
             "x": 0,
-            "y": 24,
+            "y": 32,
             "w": 12,
             "h": 8
           },
@@ -568,7 +655,7 @@ data:
           ],
           "gridPos": {
             "x": 12,
-            "y": 24,
+            "y": 32,
             "w": 12,
             "h": 8
           },
@@ -592,7 +679,7 @@ data:
           "collapsed": false,
           "gridPos": {
             "x": 0,
-            "y": 32,
+            "y": 40,
             "w": 24,
             "h": 1
           }
@@ -628,7 +715,7 @@ data:
           ],
           "gridPos": {
             "x": 0,
-            "y": 33,
+            "y": 41,
             "w": 12,
             "h": 8
           },
@@ -676,7 +763,7 @@ data:
           ],
           "gridPos": {
             "x": 12,
-            "y": 33,
+            "y": 41,
             "w": 12,
             "h": 8
           },
@@ -715,7 +802,7 @@ data:
           ],
           "gridPos": {
             "x": 0,
-            "y": 41,
+            "y": 49,
             "w": 12,
             "h": 8
           },
@@ -754,7 +841,7 @@ data:
           ],
           "gridPos": {
             "x": 12,
-            "y": 41,
+            "y": 49,
             "w": 12,
             "h": 8
           },
@@ -778,7 +865,7 @@ data:
           "collapsed": false,
           "gridPos": {
             "x": 0,
-            "y": 49,
+            "y": 57,
             "w": 24,
             "h": 1
           }
@@ -805,7 +892,7 @@ data:
           ],
           "gridPos": {
             "x": 0,
-            "y": 50,
+            "y": 58,
             "w": 12,
             "h": 8
           },
@@ -844,7 +931,7 @@ data:
           ],
           "gridPos": {
             "x": 12,
-            "y": 50,
+            "y": 58,
             "w": 12,
             "h": 8
           },
@@ -868,7 +955,7 @@ data:
           "collapsed": false,
           "gridPos": {
             "x": 0,
-            "y": 58,
+            "y": 66,
             "w": 24,
             "h": 1
           }
@@ -879,7 +966,7 @@ data:
           "title": "Firing alerts (from Prometheus)",
           "gridPos": {
             "x": 0,
-            "y": 59,
+            "y": 67,
             "w": 24,
             "h": 8
           },

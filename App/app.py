@@ -30,7 +30,32 @@ REQUEST_LATENCY = Histogram(
     "http_request_duration_seconds",
     "HTTP request latency in seconds",
     ["method", "endpoint"],
-    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+    buckets=(
+        0.005,
+        0.010,
+        0.015,
+        0.020,
+        0.025,
+        0.030,
+        0.035,
+        0.040,
+        0.045,
+        0.050,
+        0.075,
+        0.100,
+        0.250,
+        0.500,
+        1.0,
+        2.5,
+        5.0,
+        10.0,
+    ),
+)
+ENDPOINT_DELAY = Histogram(
+    "endpoint_delay_seconds",
+    "Random processing delay per endpoint in seconds",
+    ["endpoint"],
+    buckets=(0.010, 0.015, 0.020, 0.025, 0.030, 0.035, 0.040, 0.045, 0.050),
 )
 # Saturation: how many requests are being handled right now.
 REQUESTS_IN_PROGRESS = Gauge("http_requests_in_progress", "HTTP requests currently being served")
@@ -213,11 +238,15 @@ def create_app():
         return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
     # ---------------- task API ----------------
+    def simulate_random_delay(endpoint):
+        delay = secrets.SystemRandom().uniform(0.010, 0.050)
+        ENDPOINT_DELAY.labels(endpoint=endpoint).observe(delay)
+        time.sleep(delay)
+
     @app.get("/api/tasks")
     def list_tasks():
         with tracer.start_as_current_span("tasks.list"):
-            # Simulate processing delay oscillating randomly between 10ms and 50ms
-            time.sleep(secrets.SystemRandom().uniform(0.010, 0.050))
+            simulate_random_delay("GET /api/tasks")
             with lock:
                 tasks = sorted(store["tasks"].values(), key=lambda t: t["id"])
             return jsonify(tasks=tasks)
@@ -231,8 +260,7 @@ def create_app():
         if title is None:
             return reject("invalid_title", f"title must be 1-{TITLE_MAX_LENGTH} characters")
         with tracer.start_as_current_span("tasks.create"):
-            # Simulate processing delay oscillating randomly between 10ms and 50ms
-            time.sleep(secrets.SystemRandom().uniform(0.010, 0.050))
+            simulate_random_delay("POST /api/tasks")
             with lock:
                 if len(store["tasks"]) >= max_tasks:
                     return reject("limit_reached", "task limit reached", 409)
@@ -249,8 +277,7 @@ def create_app():
         if not isinstance(data, dict):
             return reject("invalid_json", "body must be a JSON object")
         with tracer.start_as_current_span("tasks.update"):
-            # Simulate processing delay oscillating randomly between 10ms and 50ms
-            time.sleep(secrets.SystemRandom().uniform(0.010, 0.050))
+            simulate_random_delay("PUT /api/tasks/<id>")
             with lock:
                 task = store["tasks"].get(task_id)
                 if task is None:
@@ -275,8 +302,7 @@ def create_app():
     @app.delete("/api/tasks/<int:task_id>")
     def delete_task(task_id):
         with tracer.start_as_current_span("tasks.delete"):
-            # Simulate processing delay oscillating randomly between 10ms and 50ms
-            time.sleep(secrets.SystemRandom().uniform(0.010, 0.050))
+            simulate_random_delay("DELETE /api/tasks/<id>")
             with lock:
                 if store["tasks"].pop(task_id, None) is None:
                     return jsonify(error="task not found"), 404
