@@ -8,10 +8,8 @@ import time
 
 from flask import Flask, Response, g, jsonify, render_template, request
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
-from opentelemetry import trace
 
 APP_VERSION = os.environ.get("APP_VERSION", "1.0.0")
-SERVICE_NAME = os.environ.get("OTEL_SERVICE_NAME", "sre-task-manager")
 
 # Endpoints that must not be counted in the HTTP metrics (probes, scrapes).
 UNMEASURED_PATHS = {"/healthz", "/readyz", "/metrics"}
@@ -68,8 +66,6 @@ APP_INFO = Gauge("app_info", "Application build information", ["version"])
 CHAOS_ERROR_RATE = Gauge("chaos_error_rate", "Injected fraction of failing requests (0-1)")
 CHAOS_LATENCY = Gauge("chaos_latency_seconds", "Injected extra latency per request")
 
-tracer = trace.get_tracer(__name__)
-
 
 # --------------------------------------------------------------------------
 # Structured logging
@@ -102,30 +98,6 @@ logger = logging.getLogger("task-manager")
 
 
 # --------------------------------------------------------------------------
-# Tracing (optional)
-# --------------------------------------------------------------------------
-def setup_tracing(app):
-    """Enable OpenTelemetry only when an OTLP endpoint is configured."""
-    endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
-    if not endpoint:
-        return
-    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-    from opentelemetry.instrumentation.flask import FlaskInstrumentor
-    from opentelemetry.sdk.resources import Resource
-    from opentelemetry.sdk.trace import TracerProvider
-    from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
-    provider = TracerProvider(resource=Resource.create({"service.name": SERVICE_NAME}))
-    # Jaeger's OTLP receiver inside the cluster is plain gRPC (no TLS).
-    provider.add_span_processor(
-        BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint, insecure=True))
-    )
-    trace.set_tracer_provider(provider)
-    FlaskInstrumentor().instrument_app(app, excluded_urls="healthz,readyz,metrics")
-    logger.info("tracing enabled", extra={"fields": {"otlp_endpoint": endpoint}})
-
-
-# --------------------------------------------------------------------------
 # Application factory
 # --------------------------------------------------------------------------
 def create_app():
@@ -150,7 +122,6 @@ def create_app():
         TASKS_CURRENT.labels(status="open").set(len(store["tasks"]) - done)
 
     refresh_task_gauges()
-    setup_tracing(app)
 
     # ---------------- request lifecycle: metrics, logs, chaos ----------------
     @app.before_request
@@ -180,7 +151,6 @@ def create_app():
         REQUEST_COUNT.labels(request.method, endpoint, response.status_code).inc()
         REQUEST_LATENCY.labels(request.method, endpoint).observe(duration)
         REQUESTS_IN_PROGRESS.dec()
-        span_ctx = trace.get_current_span().get_span_context()
         logger.info(
             "request",
             extra={
@@ -189,7 +159,6 @@ def create_app():
                     "endpoint": endpoint,
                     "status": response.status_code,
                     "duration_ms": round(duration * 1000, 2),
-                    "trace_id": format(span_ctx.trace_id, "032x") if span_ctx.is_valid else None,
                 }
             },
         )
@@ -245,11 +214,10 @@ def create_app():
 
     @app.get("/api/tasks")
     def list_tasks():
-        with tracer.start_as_current_span("tasks.list"):
-            simulate_random_delay("GET /api/tasks")
-            with lock:
-                tasks = sorted(store["tasks"].values(), key=lambda t: t["id"])
-            return jsonify(tasks=tasks)
+        simulate_random_delay("GET /api/tasks")
+        with lock:
+            tasks = sorted(store["tasks"].values(), key=lambda t: t["id"])
+        return jsonify(tasks=tasks)
 
     @app.post("/api/tasks")
     def create_task():
@@ -259,15 +227,14 @@ def create_app():
         title = parse_title(data)
         if title is None:
             return reject("invalid_title", f"title must be 1-{TITLE_MAX_LENGTH} characters")
-        with tracer.start_as_current_span("tasks.create"):
-            simulate_random_delay("POST /api/tasks")
-            with lock:
-                if len(store["tasks"]) >= max_tasks:
-                    return reject("limit_reached", "task limit reached", 409)
-                task = {"id": store["next_id"], "title": title, "done": False}
-                store["tasks"][task["id"]] = task
-                store["next_id"] += 1
-                refresh_task_gauges()
+        simulate_random_delay("POST /api/tasks")
+        with lock:
+            if len(store["tasks"]) >= max_tasks:
+                return reject("limit_reached", "task limit reached", 409)
+            task = {"id": store["next_id"], "title": title, "done": False}
+            store["tasks"][task["id"]] = task
+            store["next_id"] += 1
+            refresh_task_gauges()
         TASK_OPERATIONS.labels(operation="created").inc()
         return jsonify(task), 201
 
@@ -276,37 +243,33 @@ def create_app():
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return reject("invalid_json", "body must be a JSON object")
-        with tracer.start_as_current_span("tasks.update"):
-            simulate_random_delay("PUT /api/tasks/<id>")
-            with lock:
-                task = store["tasks"].get(task_id)
-                if task is None:
-                    return jsonify(error="task not found"), 404
-                if "title" in data:
-                    title = parse_title(data)
-                    if title is None:
-                        return reject(
-                            "invalid_title", f"title must be 1-{TITLE_MAX_LENGTH} characters"
-                        )
-                    task["title"] = title
-                if "done" in data:
-                    if not isinstance(data["done"], bool):
-                        return reject("invalid_done", "done must be true or false")
-                    if data["done"] != task["done"]:
-                        operation = "completed" if data["done"] else "reopened"
-                        TASK_OPERATIONS.labels(operation=operation).inc()
-                    task["done"] = data["done"]
-                refresh_task_gauges()
-                return jsonify(task)
+        simulate_random_delay("PUT /api/tasks/<id>")
+        with lock:
+            task = store["tasks"].get(task_id)
+            if task is None:
+                return jsonify(error="task not found"), 404
+            if "title" in data:
+                title = parse_title(data)
+                if title is None:
+                    return reject("invalid_title", f"title must be 1-{TITLE_MAX_LENGTH} characters")
+                task["title"] = title
+            if "done" in data:
+                if not isinstance(data["done"], bool):
+                    return reject("invalid_done", "done must be true or false")
+                if data["done"] != task["done"]:
+                    operation = "completed" if data["done"] else "reopened"
+                    TASK_OPERATIONS.labels(operation=operation).inc()
+                task["done"] = data["done"]
+            refresh_task_gauges()
+            return jsonify(task)
 
     @app.delete("/api/tasks/<int:task_id>")
     def delete_task(task_id):
-        with tracer.start_as_current_span("tasks.delete"):
-            simulate_random_delay("DELETE /api/tasks/<id>")
-            with lock:
-                if store["tasks"].pop(task_id, None) is None:
-                    return jsonify(error="task not found"), 404
-                refresh_task_gauges()
+        simulate_random_delay("DELETE /api/tasks/<id>")
+        with lock:
+            if store["tasks"].pop(task_id, None) is None:
+                return jsonify(error="task not found"), 404
+            refresh_task_gauges()
         TASK_OPERATIONS.labels(operation="deleted").inc()
         return "", 204
 
