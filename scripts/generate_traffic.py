@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""Traffic generator and alert simulator for the SRE Task Manager (standard library only).
+"""Traffic generator and alert simulator for the SRE Task Manager.
 
-Replaces the old per-minute CronJob and trigger_alerts.sh.
 
 Modes:
   normal   healthy mixed traffic (create/list/update/delete + one invalid request per loop)
