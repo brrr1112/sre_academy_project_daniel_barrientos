@@ -106,16 +106,32 @@ jobs:
         id: vars
         run: echo "tag=main-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
-      - name: Build image and save it to App/dockerImage (timestamp ddHHMM)
+      #arm64 image
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # One tar per architecture (docker save cannot export a multi-platform image):
+      #   sre-task-manager-<tag>-amd64-<ddHHMM>.tar -> x86_64 servers, GitHub runners
+      #   sre-task-manager-<tag>-arm64-<ddHHMM>.tar -> Apple Silicon / ARM servers
+      - name: Build amd64 and arm64 images and save them to App/dockerImage (timestamp ddHHMM)
         run: |
           TIMESTAMP=$(date -u +%d%H%M)
-          IMAGE_FILE="App/dockerImage/sre-task-manager-${{ steps.vars.outputs.tag }}-${TIMESTAMP}.tar"
+          TAG="${{ steps.vars.outputs.tag }}"
           mkdir -p App/dockerImage
-          docker build -t sre-task-manager:${{ steps.vars.outputs.tag }} App
-          docker save -o "${IMAGE_FILE}" sre-task-manager:${{ steps.vars.outputs.tag }}
+          for ARCH in amd64 arm64; do
+            docker buildx build --platform "linux/${ARCH}" --load \
+              -t "sre-task-manager:${TAG}-${ARCH}" App
+            docker save -o "App/dockerImage/sre-task-manager-${TAG}-${ARCH}-${TIMESTAMP}.tar" \
+              "sre-task-manager:${TAG}-${ARCH}"
+          done
           ls -lh App/dockerImage
 
-      - name: Upload saved image as a workflow artifact
+      - name: Upload saved images as a workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: docker-image-${{ steps.vars.outputs.tag }}
