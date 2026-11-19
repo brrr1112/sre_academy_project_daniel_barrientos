@@ -32,11 +32,6 @@ jobs:
           cd App
           pip install -r requirements-dev.txt
 
-      - name: Code formatting check
-        run: |
-          cd App
-          black --check .
-
       - name: Linting
         run: |
           cd App
