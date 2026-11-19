@@ -115,25 +115,22 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # One tar per architecture (docker save cannot export a multi-platform image):
-      #   sre-task-manager-<tag>-amd64-<ddHHMM>.tar -> x86_64 servers, GitHub runners
-      #   sre-task-manager-<tag>-arm64-<ddHHMM>.tar -> Apple Silicon / ARM servers
-      - name: Build amd64 and arm64 images and save them to App/dockerImage (timestamp ddHHMM)
+      # arm64 only -> Apple Silicon / ARM servers:
+      #   sre-task-manager-<tag>-arm64-<ddHHMM>.tar
+      - name: Build arm64 image and save it to App/dockerImage (timestamp ddHHMM)
         run: |
           TIMESTAMP=$(date -u +%d%H%M)
           TAG="${{ steps.vars.outputs.tag }}"
           mkdir -p App/dockerImage
-          for ARCH in amd64 arm64; do
-            docker buildx build --platform "linux/${ARCH}" --load \
-              -t "sre-task-manager:${TAG}-${ARCH}" App
-            docker save -o "App/dockerImage/sre-task-manager-${TAG}-${ARCH}-${TIMESTAMP}.tar" \
-              "sre-task-manager:${TAG}-${ARCH}"
-          done
+          docker buildx build --platform linux/arm64 --load \
+            -t "sre-task-manager:${TAG}-arm64" App
+          docker save -o "App/dockerImage/sre-task-manager-${TAG}-arm64-${TIMESTAMP}.tar" \
+            "sre-task-manager:${TAG}-arm64"
           ls -lh App/dockerImage
 
-      - name: Upload saved images as a workflow artifact
+      - name: Upload arm64 image as a workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: docker-image-${{ steps.vars.outputs.tag }}
-          path: App/dockerImage/*.tar
+          name: docker-image-arm64-${{ steps.vars.outputs.tag }}
+          path: App/dockerImage/*-arm64-*.tar
           retention-days: 14
