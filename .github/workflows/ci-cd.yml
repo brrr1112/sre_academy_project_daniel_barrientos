@@ -72,24 +72,10 @@ jobs:
           cd App
           safety check -r requirements.txt
 
-  validate-chart:
-    name: Validate Helm Chart
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-
-      - name: Lint and render the chart
-        run: |
-          helm lint helm/sre-task-manager
-          helm template sre-task-manager helm/sre-task-manager --namespace application > /dev/null
-
   build:
     name: Build and Push Image
     runs-on: ubuntu-latest
-    needs: [test, security-scan, validate-chart]
+    needs: [test, security-scan]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       contents: read

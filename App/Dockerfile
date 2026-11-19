@@ -6,7 +6,7 @@ EXPOSE 5000
 # Set the working directory inside the container
 WORKDIR /opt/app-root/src
 
-# Install Flask, Prometheus and OpenTelemetry libraries (pinned)
+# Install Flask and the Prometheus client (pinned)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -16,7 +16,7 @@ COPY --chown=1001:0 templates ./templates
 COPY --chown=1001:0 static ./static
 
 # `flask run` settings. Host defaults to loopback; Kubernetes overrides
-# FLASK_RUN_HOST with the pod IP (see k8s/app.yaml) so the app is never
+# FLASK_RUN_HOST with the pod IP (see kube/app/deployment.yaml) so the app is never
 # bound to 0.0.0.0.
 ENV FLASK_APP=app \
     FLASK_RUN_HOST=127.0.0.1 \
