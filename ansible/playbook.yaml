@@ -1,51 +1,106 @@
 ---
-# Infrastructure as Code: prepares a workstation and deploys the project.
+# Infrastructure as Code: deploys the SRE Task Manager and the monitoring stack
+# with plain `kubectl apply` (one directory per component) and waits for each rollout.
+#
+# Prerequisites: a running cluster (colima start && minikube start) and the app image
+# already loaded into Minikube (./deploy.sh builds and loads it; or pass image=<name>).
+#
 # Run from the repository root:
 #   ansible-playbook -i ansible/inventory.ini ansible/playbook.yaml
-- name: Prepare tools and deploy the SRE Task Manager
-  hosts: all
+#   ansible-playbook -i ansible/inventory.ini ansible/playbook.yaml --tags prometheus,grafana
+#   ansible-playbook -i ansible/inventory.ini ansible/playbook.yaml -e image=sre-task-manager:1.0.0
+#
+# Optional environment variables (never commit real values):
+#   SLACK_WEBHOOK_URL, SMTP_PASSWORD   used by Alertmanager
+- name: Deploy the SRE Task Manager and its monitoring stack
+  hosts: allhosts
+  gather_facts: false
+
   vars:
-    project_dir: "{{ playbook_dir }}/.."
+    repo_root: "{{ playbook_dir }}/.."
+    image: "sre-task-manager:1.0.0"
+    slack_webhook_url: "{{ lookup('env', 'SLACK_WEBHOOK_URL') | default('https://hooks.slack.com/services/REPLACE/ME/PLEASE', true) }}"
+    smtp_password: "{{ lookup('env', 'SMTP_PASSWORD') | default('replace-me', true) }}"
+
   tasks:
-    - name: Install tools on macOS
-      homebrew:
-        name:
-          - colima
-          - docker
-          - kubectl
-          - minikube
-          - helm
-        state: present
-      when: ansible_os_family == "Darwin"
-
-    - name: Install kubectl on Debian/Ubuntu
-      apt:
-        name: kubectl
-        state: present
-      become: yes
-      when: ansible_os_family == "Debian"
-
-    - name: Check that the required tools are available
-      command: "which {{ item }}"
-      loop:
-        - docker
-        - kubectl
-        - minikube
+    - name: Verify the Kubernetes cluster connection
+      ansible.builtin.command: kubectl cluster-info
       changed_when: false
+      tags: [always]
 
-    - name: Deploy the application and the monitoring stack
-      command: ./cluster.sh
-      args:
-        chdir: "{{ project_dir }}"
+    - name: Create namespaces
+      ansible.builtin.command: "kubectl apply -f {{ repo_root }}/kube/namespaces.yaml"
+      changed_when: false
+      tags: [always]
+
+    - name: Create the Alertmanager secret
+      ansible.builtin.shell: |
+        kubectl -n monitoring create secret generic alertmanager-secrets \
+          --from-literal=slack-webhook-url="$SLACK_URL" \
+          --from-literal=smtp-password="$SMTP_PASS" \
+          --dry-run=client -o yaml | kubectl apply -f -
       environment:
-        SLACK_WEBHOOK_URL: "{{ lookup('env', 'SLACK_WEBHOOK_URL') }}"
-        SMTP_PASSWORD: "{{ lookup('env', 'SMTP_PASSWORD') }}"
-
-    - name: Show the pods
-      command: kubectl get pods -A
-      register: pods
+        SLACK_URL: "{{ slack_webhook_url }}"
+        SMTP_PASS: "{{ smtp_password }}"
       changed_when: false
+      no_log: true
+      tags: [alertmanager]
 
-    - name: Print the pods
-      debug:
-        var: pods.stdout_lines
+    - name: Create the Grafana admin secret (kept if it already exists)
+      ansible.builtin.shell: |
+        kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1 || \
+        kubectl -n monitoring create secret generic grafana-admin \
+          --from-literal=admin-password="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20)"
+      changed_when: false
+      no_log: true
+      tags: [grafana]
+
+    # --- Monitoring stack (monitoring namespace) ---
+    - name: Apply Prometheus manifests
+      ansible.builtin.command: "kubectl apply -f {{ repo_root }}/kube/prometheus/"
+      changed_when: false
+      tags: [prometheus]
+
+    - name: Apply Alertmanager manifests
+      ansible.builtin.command: "kubectl apply -f {{ repo_root }}/kube/alertmanager/"
+      changed_when: false
+      tags: [alertmanager]
+
+    - name: Apply Grafana manifests
+      ansible.builtin.command: "kubectl apply -f {{ repo_root }}/kube/grafana/"
+      changed_when: false
+      tags: [grafana]
+
+    # --- Application (application namespace) ---
+    # The manifest uses a placeholder image; substitute the locally loaded one.
+    - name: Apply application manifests
+      ansible.builtin.shell: |
+        for f in configmap deployment service; do
+          sed "s|image: ghcr.io/YOUR-USERNAME/sre-task-manager:1.0.0|image: $APP_IMAGE|" \
+            "{{ repo_root }}/kube/app/$f.yaml" | kubectl apply -f -
+        done
+      environment:
+        APP_IMAGE: "{{ image }}"
+      changed_when: false
+      tags: [app]
+
+    - name: Wait for rollouts
+      ansible.builtin.command: "kubectl rollout status {{ item.deployment }} -n {{ item.namespace }} --timeout=180s"
+      loop:
+        - { namespace: monitoring, deployment: deployment/prometheus-deployment }
+        - { namespace: monitoring, deployment: deployment/alertmanager-deployment }
+        - { namespace: monitoring, deployment: deployment/grafana-deployment }
+        - { namespace: application, deployment: deployment/sre-task-manager }
+      changed_when: false
+      tags: [always]
+
+    - name: Show the pods and services
+      ansible.builtin.command: kubectl get pods,svc -A
+      register: status
+      changed_when: false
+      tags: [verify]
+
+    - name: Print the result
+      ansible.builtin.debug:
+        msg: "{{ status.stdout_lines }}"
+      tags: [verify]
