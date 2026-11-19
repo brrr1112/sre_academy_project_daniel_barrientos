@@ -216,6 +216,8 @@ def create_app():
     @app.get("/api/tasks")
     def list_tasks():
         with tracer.start_as_current_span("tasks.list"):
+            # Simulate processing delay oscillating randomly between 10ms and 50ms
+            time.sleep(secrets.SystemRandom().uniform(0.010, 0.050))
             with lock:
                 tasks = sorted(store["tasks"].values(), key=lambda t: t["id"])
             return jsonify(tasks=tasks)
@@ -229,6 +231,8 @@ def create_app():
         if title is None:
             return reject("invalid_title", f"title must be 1-{TITLE_MAX_LENGTH} characters")
         with tracer.start_as_current_span("tasks.create"):
+            # Simulate processing delay oscillating randomly between 10ms and 50ms
+            time.sleep(secrets.SystemRandom().uniform(0.010, 0.050))
             with lock:
                 if len(store["tasks"]) >= max_tasks:
                     return reject("limit_reached", "task limit reached", 409)
@@ -245,6 +249,8 @@ def create_app():
         if not isinstance(data, dict):
             return reject("invalid_json", "body must be a JSON object")
         with tracer.start_as_current_span("tasks.update"):
+            # Simulate processing delay oscillating randomly between 10ms and 50ms
+            time.sleep(secrets.SystemRandom().uniform(0.010, 0.050))
             with lock:
                 task = store["tasks"].get(task_id)
                 if task is None:
@@ -269,6 +275,8 @@ def create_app():
     @app.delete("/api/tasks/<int:task_id>")
     def delete_task(task_id):
         with tracer.start_as_current_span("tasks.delete"):
+            # Simulate processing delay oscillating randomly between 10ms and 50ms
+            time.sleep(secrets.SystemRandom().uniform(0.010, 0.050))
             with lock:
                 if store["tasks"].pop(task_id, None) is None:
                     return jsonify(error="task not found"), 404
