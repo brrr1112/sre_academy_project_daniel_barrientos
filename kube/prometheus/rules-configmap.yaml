@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: monitoring
+  labels:
+    app: prometheus
+data:
+  sre-task-manager.rules: |
+    groups:
+      - name: sre-task-manager-alerts
+        rules:
+          # Alert 1: Service Down (Availability)
+          - alert: TaskManagerDown
+            expr: up{job="sre-task-manager"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Task Manager is down"
+              description: "The SRE Task Manager service has been unreachable for more than 1 minute."
+
+          # Alert 2: High Error Rate (Errors)
+          - alert: HighErrorRate
+            expr: |
+              sum(rate(http_requests_total{job="sre-task-manager",status=~"5.."}[5m]))
+                /
+              sum(rate(http_requests_total{job="sre-task-manager"}[5m])) > 0.05
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "High HTTP 5xx error rate (> 5%)"
+              description: "More than 5% of HTTP requests returned 5xx server errors over the last 5 minutes."
+
+          # Alert 3: High Latency (Latency)
+          - alert: HighResponseLatency
+            expr: |
+              histogram_quantile(0.95,
+                sum(rate(http_request_duration_seconds_bucket{job="sre-task-manager"}[5m])) by (le)
+              ) > 0.5
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High response latency (p95 > 500ms)"
+              description: "95th percentile response time is above 500ms over the last 5 minutes."

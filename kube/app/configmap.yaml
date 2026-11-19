@@ -1,0 +1,22 @@
+# Identity for the app pods. The app never calls the Kubernetes API, so no token is mounted.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sre-task-manager
+  namespace: application
+automountServiceAccountToken: false
+---
+# Non-secret configuration, injected as environment variables
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sre-task-manager-config
+  namespace: application
+  labels:
+    app: sre-task-manager
+data:
+  APP_VERSION: "1.0.0"
+  LOG_LEVEL: "INFO"
+  MAX_TASKS: "200"
+  # Enables POST /api/chaos (fault injection) so alerts can be demonstrated on demand
+  ENABLE_CHAOS: "true"

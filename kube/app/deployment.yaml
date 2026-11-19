@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sre-task-manager
+  namespace: application
+  labels:
+    app: sre-task-manager
+spec:
+  # One replica on purpose: tasks are kept in memory (see App/app.py)
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: sre-task-manager
+  template:
+    metadata:
+      labels:
+        app: sre-task-manager
+    spec:
+      serviceAccountName: sre-task-manager
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sre-task-manager
+          # deploy.sh replaces this image with the one that was just built/loaded
+          image: ghcr.io/YOUR-USERNAME/sre-task-manager:1.0.0
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: sre-task-manager-config
+          env:
+            # Bind Flask to the pod IP instead of 0.0.0.0
+            - name: FLASK_RUN_HOST
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          # Gives the app time to start before liveness checks begin
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+            periodSeconds: 2
+            failureThreshold: 30
+          # Restart the container if the process stops answering
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          # Only send traffic to pods that report ready
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 5000
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 2

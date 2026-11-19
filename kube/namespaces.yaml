@@ -1,4 +1,4 @@
-# Namespaces are created first (cluster.sh) so the secrets can be placed in them.
+# Namespaces are created first (deploy.sh / Ansible) so the secrets can be placed in them.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -11,8 +11,3 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: monitoring
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: opentelemetry
