@@ -29,22 +29,22 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd app
+          cd App
           pip install -r requirements-dev.txt
 
       - name: Code formatting check
         run: |
-          cd app
+          cd App
           black --check .
 
       - name: Linting
         run: |
-          cd app
+          cd App
           flake8 . --max-line-length=100
 
       - name: Run unit tests
         run: |
-          cd app
+          cd App
           pytest --cov=app --cov-report=xml --cov-report=term --cov-fail-under=90
 
   security-scan:
@@ -67,14 +67,14 @@ jobs:
 
       - name: Static security analysis (fails on medium/high findings)
         run: |
-          cd app
+          cd App
           bandit -r app.py -ll
 
       - name: Check for known vulnerabilities
         # Informational: `safety check` may require an account, so it does not block the pipeline
         continue-on-error: true
         run: |
-          cd app
+          cd App
           safety check -r requirements.txt
 
   validate-chart:
