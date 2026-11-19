@@ -1,5 +1,4 @@
-# Red Hat UBI minimal Python image (runs as non-root user 1001 by default).
-FROM registry.redhat.io/ubi9/python-312-minimal:latest
+FROM python:3.10.21-alpine3.24
 
 # Expose the Flask app port
 EXPOSE 5000
