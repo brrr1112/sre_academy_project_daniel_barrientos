@@ -103,21 +103,19 @@ metadata:
 data:
   sre-task-manager.rules: |
     groups:
-      - name: sre-task-manager-golden-signals
+      - name: sre-task-manager-alerts
         rules:
-          # ---- Availability ----
+          # Alert 1: Service Down (Availability)
           - alert: TaskManagerDown
-            expr: absent(up{job="sre-task-manager"} == 1)
+            expr: up{job="sre-task-manager"} == 0
             for: 1m
             labels:
               severity: critical
-              signal: availability
             annotations:
-              summary: "Task manager is down"
-              description: "No healthy sre-task-manager target has been scraped for 1 minute."
-              runbook: "docs/runbook.md#taskmanagerdown"
+              summary: "Task Manager is down"
+              description: "The SRE Task Manager service has been unreachable for more than 1 minute."
 
-          # ---- Errors ----
+          # Alert 2: High Error Rate (Errors)
           - alert: HighErrorRate
             expr: |
               sum(rate(http_requests_total{job="sre-task-manager",status=~"5.."}[5m]))
@@ -126,14 +124,12 @@ data:
             for: 2m
             labels:
               severity: critical
-              signal: errors
             annotations:
-              summary: "More than 5% of requests are failing"
-              description: "5xx ratio is {{ $value | humanizePercentage }} over the last 5 minutes."
-              runbook: "docs/runbook.md#higherrorrate"
+              summary: "High HTTP 5xx error rate (> 5%)"
+              description: "More than 5% of HTTP requests returned 5xx server errors over the last 5 minutes."
 
-          # ---- Latency ----
-          - alert: HighLatencyP95
+          # Alert 3: High Latency (Latency)
+          - alert: HighResponseLatency
             expr: |
               histogram_quantile(0.95,
                 sum(rate(http_request_duration_seconds_bucket{job="sre-task-manager"}[5m])) by (le)
@@ -141,74 +137,9 @@ data:
             for: 2m
             labels:
               severity: warning
-              signal: latency
             annotations:
-              summary: "p95 latency is above 500 ms"
-              description: "p95 latency is {{ $value | humanizeDuration }} over the last 5 minutes."
-              runbook: "docs/runbook.md#highlatencyp95"
-
-          # ---- Traffic ----
-          # The synthetic CronJob sends ~5 requests/minute (~0.08 req/s), so a rate below
-          # 0.02 req/s means traffic (including the synthetic one) stopped.
-          - alert: LowTraffic
-            expr: sum(rate(http_requests_total{job="sre-task-manager"}[5m])) < 0.02
-            for: 5m
-            labels:
-              severity: warning
-              signal: traffic
-            annotations:
-              summary: "Request rate dropped"
-              description: "Only {{ $value | humanize }} requests/second in the last 5 minutes."
-              runbook: "docs/runbook.md#lowtraffic"
-
-          # ---- Saturation ----
-          - alert: HighMemoryUsage
-            expr: |
-              container_memory_working_set_bytes{namespace="application",container="sre-task-manager"}
-                /
-              container_spec_memory_limit_bytes{namespace="application",container="sre-task-manager"} > 0.8
-            for: 5m
-            labels:
-              severity: warning
-              signal: saturation
-            annotations:
-              summary: "Task manager is using more than 80% of its memory limit"
-              description: "Memory usage is {{ $value | humanizePercentage }} of the limit."
-              runbook: "docs/runbook.md#highmemoryusage"
-
-          - alert: TooManyConcurrentRequests
-            expr: max_over_time(http_requests_in_progress{job="sre-task-manager"}[1m]) > 3
-            for: 2m
-            labels:
-              severity: warning
-              signal: saturation
-            annotations:
-              summary: "Requests are piling up"
-              description: "Up to {{ $value }} requests were being served at the same time."
-              runbook: "docs/runbook.md#toomanyconcurrentrequests"
-
-          # ---- Stability ----
-          - alert: TaskManagerRestarted
-            expr: changes(process_start_time_seconds{job="sre-task-manager"}[15m]) > 0
-            labels:
-              severity: warning
-              signal: availability
-            annotations:
-              summary: "Task manager restarted"
-              description: "The process restarted in the last 15 minutes (in-memory tasks were lost)."
-              runbook: "docs/runbook.md#taskmanagerrestarted"
-
-          # ---- Business ----
-          - alert: TooManyOpenTasks
-            expr: tasks_current{job="sre-task-manager",status="open"} > 150
-            for: 5m
-            labels:
-              severity: warning
-              signal: business
-            annotations:
-              summary: "Open task backlog is growing"
-              description: "{{ $value }} open tasks (limit is 200)."
-              runbook: "docs/runbook.md#toomanyopentasks"
+              summary: "High response latency (p95 > 500ms)"
+              description: "95th percentile response time is above 500ms over the last 5 minutes."
 
 ---
 apiVersion: apps/v1

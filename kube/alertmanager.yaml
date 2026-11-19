@@ -43,7 +43,6 @@ data:
             text: >-
               {{ range .Alerts }}*{{ .Annotations.summary }}*
               {{ .Annotations.description }}
-              Signal: {{ .Labels.signal }} | Runbook: {{ .Annotations.runbook }}
               {{ end }}
 
       - name: slack-and-email-critical
@@ -54,7 +53,6 @@ data:
             text: >-
               {{ range .Alerts }}*{{ .Annotations.summary }}*
               {{ .Annotations.description }}
-              Signal: {{ .Labels.signal }} | Runbook: {{ .Annotations.runbook }}
               {{ end }}
         email_configs:
           - to: 'oncall@example.com'
