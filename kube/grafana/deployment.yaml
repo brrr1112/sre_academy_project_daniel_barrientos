@@ -92,7 +92,12 @@ spec:
               readOnly: true
             - name: grafana-storage
               mountPath: /var/lib/grafana
+            # Backend plugins (Prometheus, ...) unpack a binary into /tmp at start
+            - name: tmp
+              mountPath: /tmp
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: grafana-config-datasources
           configMap:
             name: grafana-datasources-config
