@@ -66,6 +66,29 @@ export SMTP_PASSWORD='...'                                        # optional
   <li><code>kubectl rollout status</code> on every Deployment, then print the endpoints.</li>
 </ol>
 
+<h3>Alternative: run every step with <code>deploy_all.sh</code></h3>
+<p><code>deploy_all.sh</code> (in the project folder, next to <code>deploy.sh</code>) chains sections 3 to 6 in a single, idempotent script, so it is safe to re-run:</p>
+<pre><code>cd /Users/danielbarrientos/Desktop/SRE/SRE_APP/sre_academy_project_daniel_barrientos
+export SLACK_WEBHOOK_URL='https://hooks.slack.com/services/...'   # optional
+export SMTP_PASSWORD='...'                                        # optional
+./deploy_all.sh /path/to/sre-task-manager-main-&lt;commit&gt;-arm64-&lt;id&gt;.tar</code></pre>
+<p>The image archive argument may be an absolute path, a path relative to the current directory, or a file name located next to the script. If omitted, it defaults to <code>sre-task-manager-main-d44721d-arm64-250127.tar</code> (next to the script, otherwise in the parent folder). In order, it:</p>
+<ol>
+  <li>Checks that <code>colima</code>, <code>docker</code>, <code>minikube</code>, <code>kubectl</code>, <code>ssh</code> and <code>curl</code> are installed.</li>
+  <li>Starts Colima only if it is not running (<code>COLIMA_CPU</code> / <code>COLIMA_MEMORY</code>, default 4 CPUs and 6 GiB).</li>
+  <li>Starts Minikube (<code>--driver=docker</code>) only if it is not running.</li>
+  <li>Runs <code>deploy.sh &lt;tar&gt;</code> (image load, namespaces, Secrets, all manifests, rollout waits).</li>
+  <li>Stops any previous tunnel and opens the SSH NodePort tunnel for 30007, 30093, 30030 and 30090 on <code>127.0.0.1</code> (section 5, Method 1).</li>
+  <li>Verifies <code>/healthz</code> and <code>/readyz</code> on the app, Alertmanager, Grafana login and Prometheus (up to 15 attempts each), then prints the local URLs. It exits with an error if any check fails.</li>
+</ol>
+<table>
+  <tr><th>Environment variable</th><th>Purpose</th></tr>
+  <tr><td><code>SLACK_WEBHOOK_URL</code></td><td>Slack incoming webhook used by Alertmanager</td></tr>
+  <tr><td><code>SMTP_PASSWORD</code></td><td>SMTP / app password used by Alertmanager for email</td></tr>
+  <tr><td><code>RESET=true</code></td><td>Delete the project namespaces first (clean slate)</td></tr>
+  <tr><td><code>COLIMA_CPU</code>, <code>COLIMA_MEMORY</code></td><td>Resources used only when Colima has to be started (default 4 and 6)</td></tr>
+</table>
+
 <h2>5. Access and Port Forwarding from macOS</h2>
 <p>On macOS with Docker driver, the Minikube VM/container network (<code>192.168.49.2</code>) is not directly routable from the host. In addition, applications are bound to Pod IPs inside containerd namespaces, which prevents direct <code>kubectl port-forward</code> from reaching them via loopback.</p>
 
@@ -155,6 +178,7 @@ minikube stop &amp;&amp; colima stop</code></pre>
   <tr><td><code>kube/alertmanager/</code></td><td>Config, Deployment (<code>emptyDir</code> for its small state), Service (NodePort 30093)</td></tr>
   <tr><td><code>kube/grafana/</code></td><td>Datasources, dashboard, PVC, Deployment (<code>Recreate</code>), Service (NodePort 30030)</td></tr>
   <tr><td><code>deploy.sh</code></td><td>Build or load the image, secrets, apply each directory, wait, print endpoints</td></tr>
+  <tr><td><code>deploy_all.sh</code></td><td>End to end: Colima, Minikube, <code>deploy.sh</code>, SSH NodePort tunnel, endpoint verification</td></tr>
   <tr><td><code>ansible/playbook.yaml</code></td><td>Same deployment as plain <code>kubectl apply</code> tasks with rollout waits</td></tr>
   <tr><td><code>scripts/generate_traffic.py</code></td><td>Traffic and alert simulator (replaces the CronJob and <code>trigger_alerts.sh</code>)</td></tr>
 </table>

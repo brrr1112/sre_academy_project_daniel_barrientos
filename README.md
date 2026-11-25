@@ -47,6 +47,8 @@ sre_academy_project_daniel_barrientos/
 ├── .github/workflows/ci-cd.yml        # CI/CD: lint, tests, security scan, arm64 image build
 ├── .gitignore                         # Ignores virtual environments, caches and secrets
 ├── deploy.sh                          # One-command, idempotent deployment to Minikube
+├── deploy_all.sh                      # End to end: Colima, Minikube, deploy.sh, SSH NodePort tunnel, verification
+├── deployment_steps.html              # Step-by-step deployment guide (open in a browser)
 ├── ansible/
 │   ├── inventory.ini                  # Local Ansible inventory (127.0.0.1)
 │   └── playbook.yaml                  # IaC deployment playbook (tagged per component)
@@ -83,7 +85,7 @@ sre_academy_project_daniel_barrientos/
 
 ## Deployment Steps
 
-> A step-by-step visual guide is available in [`deployment_steps.html`](deployment_steps.html) (open it in your browser).
+> A step-by-step visual guide is available in [`deployment_steps.html`](deployment_steps.html) (open it in your browser). It also documents [`deploy_all.sh`](deploy_all.sh).
 
 ### 1. Start the Local Cluster
 ```bash
@@ -104,6 +106,13 @@ Optional environment variables (never commit real values):
 | `SLACK_WEBHOOK_URL` | Slack incoming webhook used by Alertmanager |
 | `SMTP_PASSWORD` | SMTP / app password used by Alertmanager for email |
 | `RESET=true` | Delete the project namespaces first (clean slate) |
+
+### Option A2: Full Automation with `deploy_all.sh` (macOS)
+Runs every step of [`deployment_steps.html`](deployment_steps.html): starts Colima and Minikube if needed, runs `deploy.sh`, opens the SSH tunnel so the NodePorts are reachable on `127.0.0.1`, and verifies all endpoints. It is idempotent, so it is safe to re-run:
+```bash
+./deploy_all.sh /path/to/image.tar
+```
+It accepts the same `SLACK_WEBHOOK_URL`, `SMTP_PASSWORD` and `RESET` variables as `deploy.sh`, plus `COLIMA_CPU` and `COLIMA_MEMORY` (defaults 4 and 6) for when Colima has to be started.
 
 ### Option B: Automated Deployment with Ansible (IaC)
 ```bash
