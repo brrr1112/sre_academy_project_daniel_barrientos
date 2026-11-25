@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SRE Task Manager - Minikube deployment log</title>
+<style>
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 15px; line-height: 1.6; color: #1f2328; background: #fff; max-width: 860px; margin: 32px auto; padding: 0 20px; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  h2 { font-size: 18px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-top: 36px; }
+  p.muted, .muted { color: #57606a; }
+  pre { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+  th, td { border: 1px solid #e5e7eb; padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: #f7f8fa; }
+  .note { background: #f7f8fa; border-left: 3px solid #3b82d4; padding: 8px 12px; margin: 12px 0; }
+  .warn { background: #f7f8fa; border-left: 3px solid #7c5cd8; padding: 8px 12px; margin: 12px 0; }
+  .ok { font-weight: 600; }
+  footer { margin-top: 48px; padding-top: 12px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 12px; color: #57606a; }
+</style>
+</head>
+<body>
+
+<h1>SRE Task Manager - Minikube deployment log</h1>
+<p class="muted">Run date: 2026-11-19 &middot; macOS (Apple Silicon, arm64) &middot; Colima + Docker 29.5.2 &middot; Minikube v1.39.0 (docker driver)<br>
+Image source: <code>docker-image-arm64-main-e2e9106.zip</code> (GitHub Actions artifact, commit <code>e2e9106</code>)</p>
+
+<h2>1. Result</h2>
+<table>
+  <tr><th>Component</th><th>Namespace</th><th>Status</th><th>NodePort</th></tr>
+  <tr><td>Application (sre-task-manager)</td><td>application</td><td class="ok">1/1 Running</td><td>30007</td></tr>
+  <tr><td>Prometheus</td><td>monitoring</td><td class="ok">1/1 Running</td><td>30090</td></tr>
+  <tr><td>Alertmanager</td><td>monitoring</td><td class="ok">1/1 Running</td><td>30093</td></tr>
+  <tr><td>Grafana</td><td>monitoring</td><td class="ok">1/1 Running</td><td>30030</td></tr>
+  <tr><td>PVC prometheus-data (5Gi) / grafana-data (1Gi)</td><td>monitoring</td><td class="ok">Bound</td><td>-</td></tr>
+</table>
+<p>Minikube node IP: <code>192.168.49.2</code>. Direct URLs, from inside the Minikube node: <code>http://192.168.49.2:&lt;NodePort&gt;</code>. See section 5 for access from the Mac.</p>
+
+<h2>2. Prepare the image</h2>
+<p>The GitHub artifact is a zip that contains the <code>docker save</code> tar.</p>
+<pre><code>cd /Users/danielbarrientos/Desktop/SRE/SRE_APP
+mkdir -p /tmp/sre_artifact
+unzip -o docker-image-arm64-main-e2e9106.zip -d /tmp/sre_artifact
+# -> /tmp/sre_artifact/sre-task-manager-main-e2e9106-arm64-191758.tar (33 MB)</code></pre>
+
+<h2>3. Start the container runtime and Minikube</h2>
+<p>Docker was not running (no <code>/var/run/docker.sock</code>), and Minikube had no profile yet.</p>
+<pre><code>colima start
+docker version --format '{{.Server.Version}}'     # 29.5.2
+minikube start --driver=docker                    # Kubernetes v1.37.0 on containerd
+kubectl get nodes</code></pre>
+<div class="note">Colima was started with its defaults (2 CPUs, 2 GiB). The whole stack ran on that, but it is tight. If pods are evicted or restart, use <code>colima stop &amp;&amp; colima start --cpu 4 --memory 6</code> and start Minikube again.</div>
+
+<h2>4. Deploy everything with one command</h2>
+<pre><code>cd /Users/danielbarrientos/Desktop/SRE/SRE_APP/sre_academy_project_daniel_barrientos
+export SLACK_WEBHOOK_URL='https://hooks.slack.com/services/...'   # optional
+export SMTP_PASSWORD='...'                                        # optional
+./deploy.sh /tmp/sre_artifact/sre-task-manager-main-e2e9106-arm64-191758.tar</code></pre>
+<p><code>deploy.sh</code> performs, in order:</p>
+<ol>
+  <li><code>docker load -i &lt;tar&gt;</code> and read the image name (<code>sre-task-manager:main-e2e9106-arm64</code>).</li>
+  <li><code>minikube image load sre-task-manager:main-e2e9106-arm64</code>.</li>
+  <li><code>kubectl apply -f kube/namespaces.yaml</code> (application, monitoring).</li>
+  <li>Create the Secrets <code>alertmanager-secrets</code> (from the environment variables, placeholders if unset) and <code>grafana-admin</code> (random password).</li>
+  <li>Apply one directory per component: <code>kube/prometheus/</code>, <code>kube/alertmanager/</code>, <code>kube/grafana/</code>, then <code>kube/app/</code> (with the image name substituted).</li>
+  <li><code>kubectl rollout status</code> on every Deployment, then print the endpoints.</li>
+</ol>
+
+<h2>5. Access and Port Forwarding from macOS</h2>
+<p>On macOS with Docker driver, the Minikube VM/container network (<code>192.168.49.2</code>) is not directly routable from the host. In addition, applications are bound to Pod IPs inside containerd namespaces, which prevents direct <code>kubectl port-forward</code> from reaching them via loopback.</p>
+
+<h3>Method 1: Direct SSH NodePort Tunnel (Recommended - Preserves exact NodePorts)</h3>
+<p>This forwards all 4 Kubernetes NodePorts 1:1 to <code>127.0.0.1</code> through Minikube's SSH bridge in a single background command:</p>
+
+<pre><code># 1. Extract the Minikube SSH Key and dynamic SSH port on the host
+SSH_KEY=$(minikube ssh-key)
+SSH_PORT=$(docker port minikube 22/tcp | head -n 1 | sed 's/.*://')
+
+# 2. Launch background SSH port forward for all 4 services
+ssh -i "$SSH_KEY" \
+  -o StrictHostKeyChecking=no \
+  -p "$SSH_PORT" \
+  -N -f \
+  -L 30007:127.0.0.1:30007 \
+  -L 30093:127.0.0.1:30093 \
+  -L 30030:127.0.0.1:30030 \
+  -L 30090:127.0.0.1:30090 \
+  docker@127.0.0.1</code></pre>
+
+<p>To stop this tunnel later:</p>
+<pre><code>pkill -f "ssh.*30007:127.0.0.1:30007"</code></pre>
+
+<h3>Method 2: Minikube Service command (Foreground terminal)</h3>
+<pre><code>minikube service sre-task-manager-service -n application   # Opens http://127.0.0.1:&lt;port&gt;
+minikube service alertmanager             -n monitoring
+minikube service grafana-service          -n monitoring
+minikube service prometheus-service       -n monitoring</code></pre>
+
+<h2>6. Accessible Local URLs & Verification</h2>
+<table>
+  <tr><th>Application</th><th>Namespace</th><th>NodePort</th><th>Local Host URL</th><th>Status</th></tr>
+  <tr><td><strong>SRE Task Manager</strong></td><td>application</td><td>30007</td><td><a href="http://127.0.0.1:30007/">http://127.0.0.1:30007/</a></td><td class="ok">HTTP 200 (Active)</td></tr>
+  <tr><td><strong>Alertmanager</strong></td><td>monitoring</td><td>30093</td><td><a href="http://127.0.0.1:30093/#/alerts">http://127.0.0.1:30093/#/alerts</a></td><td class="ok">HTTP 200 (Active)</td></tr>
+  <tr><td><strong>Grafana</strong></td><td>monitoring</td><td>30030</td><td><a href="http://127.0.0.1:30030/login">http://127.0.0.1:30030/login</a></td><td class="ok">HTTP 200 (Active)</td></tr>
+  <tr><td><strong>Prometheus</strong></td><td>monitoring</td><td>30090</td><td><a href="http://127.0.0.1:30090/query">http://127.0.0.1:30090/query</a></td><td class="ok">HTTP 200 (Active)</td></tr>
+</table>
+
+<h3>Verification Commands (Run from Host macOS)</h3>
+<pre><code>curl -sI http://127.0.0.1:30007/healthz                 # HTTP 200 OK
+curl -sI http://127.0.0.1:30007/readyz                  # HTTP 200 OK
+curl -s  http://127.0.0.1:30093/-/ready                 # OK
+curl -sI http://127.0.0.1:30030/login                   # HTTP 200 OK
+curl -s  http://127.0.0.1:30090/-/ready                 # Prometheus Server is Ready.</code></pre>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>App /healthz, /readyz, POST /api/tasks, /metrics</td><td class="ok">OK (task id 7 created, http_requests_total populated)</td></tr>
+  <tr><td>Prometheus targets (<code>up</code> query)</td><td class="ok">All 5 targets = 1 (app, cAdvisor, 3 monitoring pods)</td></tr>
+  <tr><td>Prometheus to Alertmanager link</td><td class="ok">Alertmanager discovered at port 9093</td></tr>
+  <tr><td>Alert rules loaded</td><td class="ok">TaskManagerDown, HighErrorRate, HighResponseLatency</td></tr>
+  <tr><td>Alertmanager ready</td><td class="ok">OK</td></tr>
+  <tr><td>Grafana datasources (provisioned)</td><td class="ok">Prometheus, Alertmanager</td></tr>
+  <tr><td>Grafana dashboard (provisioned)</td><td class="ok">SRE Task Manager - Golden Signals</td></tr>
+</table>
+<p>Not verified: Grafana's own "Test" of the Prometheus datasource (the API call returned <code>Plugin not registered</code> for that URL form, so I did not rely on it), and delivery of Slack / email notifications (no real webhook or SMTP password was set).</p>
+
+<h2>7. Day-to-day commands</h2>
+<pre><code># Status
+kubectl get pods -A -o wide | grep -v kube-system
+kubectl get svc,pvc -A | grep -E "application|monitoring"
+minikube ip
+
+# Grafana login (user: admin)
+kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 --decode; echo
+
+# Logs / troubleshooting
+kubectl -n &lt;namespace&gt; describe pod &lt;pod&gt;
+kubectl -n &lt;namespace&gt; logs deploy/&lt;deployment&gt;
+
+# Synthetic traffic and forced test alerts (modes: normal, errors, latency, down)
+python3 scripts/generate_traffic.py --url http://127.0.0.1:30007 --mode errors --duration 150
+
+# Rebuild and redeploy (no argument builds ./App), or load a CI image archive
+./deploy.sh
+./deploy.sh &lt;new-image.tar&gt;
+
+# Clean slate / stop
+RESET=true ./deploy.sh &lt;image.tar&gt;
+minikube stop &amp;&amp; colima stop</code></pre>
+
+<h2>8. Repository layout</h2>
+<table>
+  <tr><th>Path</th><th>Purpose</th></tr>
+  <tr><td><code>kube/app/</code></td><td>ConfigMap, Deployment, Service for the task manager</td></tr>
+  <tr><td><code>kube/prometheus/</code></td><td>Config, alert rules, RBAC, PVC, Deployment (<code>Recreate</code>), Service (NodePort 30090)</td></tr>
+  <tr><td><code>kube/alertmanager/</code></td><td>Config, Deployment (<code>emptyDir</code> for its small state), Service (NodePort 30093)</td></tr>
+  <tr><td><code>kube/grafana/</code></td><td>Datasources, dashboard, PVC, Deployment (<code>Recreate</code>), Service (NodePort 30030)</td></tr>
+  <tr><td><code>deploy.sh</code></td><td>Build or load the image, secrets, apply each directory, wait, print endpoints</td></tr>
+  <tr><td><code>ansible/playbook.yaml</code></td><td>Same deployment as plain <code>kubectl apply</code> tasks with rollout waits</td></tr>
+  <tr><td><code>scripts/generate_traffic.py</code></td><td>Traffic and alert simulator (replaces the CronJob and <code>trigger_alerts.sh</code>)</td></tr>
+</table>
+
+</body>
+</html>
